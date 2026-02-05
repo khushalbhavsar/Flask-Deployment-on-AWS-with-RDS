@@ -1,235 +1,215 @@
-# 🚀 Flask + RDS Deployment on AWS Elastic Beanstalk
+# Flask + RDS Deployment on AWS Elastic Beanstalk
 
-## 📖 Description
-This project demonstrates how to deploy a **Flask web application** on **AWS Elastic Beanstalk (EB)** with a **MySQL RDS database** hosted in private subnets of a custom VPC.  
+A production-ready **Flask web application** deployed on **AWS Elastic Beanstalk** with **MySQL RDS** in a secure VPC architecture.
 
-The architecture ensures **security and scalability** by:
-- Hosting the **Flask app** in public subnets (accessible via Load Balancer).  
-- Keeping **RDS private** (not exposed to the internet, only accessible from EB instances).  
-- Managing traffic flow using **security groups** and **route tables**.  
-- Deploying without a **NAT Gateway**, keeping costs minimal.  
+![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)
+![Flask](https://img.shields.io/badge/Flask-2.x-green?logo=flask)
+![AWS](https://img.shields.io/badge/AWS-Elastic%20Beanstalk-orange?logo=amazonaws)
+![MySQL](https://img.shields.io/badge/MySQL-RDS-blue?logo=mysql)
 
-This setup is ideal for small to medium applications that need a secure backend database and a scalable web app deployment.
+## Overview
 
----
+This project demonstrates a secure, scalable insurance claims management system with:
 
-## 🛠 Tech Stack
+- **Flask application** in public subnets (accessible via Application Load Balancer)
+- **MySQL RDS** in private subnets (isolated from the internet)
+- **Security groups** controlling traffic between components
+- **Cost-optimized** architecture without NAT Gateway
 
-### **Backend**
-- **Flask (Python)** → Lightweight web framework for API & app logic.  
-- **PyMySQL** → Python client to connect Flask app with MySQL RDS.  
+## Architecture
 
-### **Database**
-- **Amazon RDS (MySQL)** → Managed relational database, deployed in private subnets for security.  
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              AWS VPC (10.0.0.0/16)                      │
+│                                                                         │
+│  ┌────────────────────────────┐    ┌────────────────────────────┐      │
+│  │     Public Subnet A        │    │     Public Subnet B        │      │
+│  │      (10.0.1.0/24)         │    │      (10.0.2.0/24)         │      │
+│  │  ┌──────────────────────┐  │    │  ┌──────────────────────┐  │      │
+│  │  │   EB EC2 Instance    │  │    │  │   EB EC2 Instance    │  │      │
+│  │  │   (Flask App)        │  │    │  │   (Flask App)        │  │      │
+│  │  └──────────────────────┘  │    │  └──────────────────────┘  │      │
+│  └────────────────────────────┘    └────────────────────────────┘      │
+│                    │                            │                       │
+│                    └──────────┬─────────────────┘                       │
+│                               ▼                                         │
+│                 ┌──────────────────────────┐                            │
+│                 │  Application Load Balancer│                           │
+│                 └──────────────────────────┘                            │
+│                               │                                         │
+│  ┌────────────────────────────┼────────────────────────────┐           │
+│  │     Private Subnet A       │     Private Subnet B       │           │
+│  │      (10.0.3.0/24)         │      (10.0.4.0/24)         │           │
+│  │         ┌──────────────────┴───────────────────┐        │           │
+│  │         │         RDS MySQL (Primary)          │        │           │
+│  │         │         (Multi-AZ Optional)          │        │           │
+│  │         └──────────────────────────────────────┘        │           │
+│  └─────────────────────────────────────────────────────────┘           │
+└─────────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+                    ┌─────────────────┐
+                    │ Internet Gateway │
+                    └─────────────────┘
+                               │
+                               ▼
+                         [ Internet ]
+```
 
-### **Infrastructure (AWS)**
-- **VPC (Virtual Private Cloud)** → Custom networking environment.  
-- **Subnets** → Public (for EB) & Private (for RDS).  
-- **Security Groups** → Firewall rules for EB, ALB, and RDS.  
-- **Elastic Beanstalk (EB)** → Application deployment & scaling platform.  
-- **Application Load Balancer (ALB)** → Distributes traffic to EB instances.  
-- **Internet Gateway (IGW)** → Provides internet access to public subnets.  
-- **Bastion Host (Optional)** → Secure access to RDS in private subnets.  
+## Tech Stack
 
-### **Others**
-- **boto3 (optional)** → AWS SDK for Python (can fetch secrets/credentials).  
-- **EB Extensions (.ebextensions)** → Custom configurations for environment variables & WSGI setup.  
-- **cURL** → For API testing.  
+| Category | Technology | Purpose |
+|----------|------------|---------|
+| **Backend** | Flask (Python) | Web framework for API & app logic |
+| **Database** | Amazon RDS (MySQL) | Managed relational database |
+| **Connector** | PyMySQL | Python MySQL client library |
+| **Compute** | Elastic Beanstalk | Application deployment & auto-scaling |
+| **Load Balancer** | Application Load Balancer | Traffic distribution |
+| **Networking** | VPC, Subnets, IGW | Custom network isolation |
+| **Security** | Security Groups | Firewall rules |
 
----
+## Project Structure
 
-## 🛠 Deployment Steps
+```
+├── application.py          # Main Flask application
+├── requirements.txt        # Python dependencies
+├── insured.sql             # Database schema
+├── nginx.conf              # Nginx configuration (optional)
+├── Docs/
+│   └── Notes.md            # Detailed deployment guide
+├── static/
+│   ├── style.css           # Application styles
+│   └── images/             # Static images
+└── templates/
+    ├── index.html          # Home page template
+    └── claim.html          # Claim submission form
+```
 
-### Step 1️⃣: Create VPC & Subnets
+## Prerequisites
 
-1. Go to **VPC → Your VPCs → Create VPC**
-   - **Name:** project-vpc  
-   - **IPv4 CIDR:** `10.0.0.0/16`  
-   - **Tenancy:** Default  
+- AWS Account with appropriate permissions
+- Python 3.x installed locally
+- AWS CLI configured (optional)
+- MySQL client for database setup
 
-2. Create subnets:
-   - **Public-A:** `10.0.1.0/24` (AZ1)  
-   - **Public-B:** `10.0.2.0/24` (AZ2)  
-   - **Private-A:** `10.0.3.0/24` (AZ1)  
-   - **Private-B:** `10.0.4.0/24` (AZ2)  
+## Environment Variables
 
----
+The application requires the following environment variables:
 
-### Step 2️⃣: Internet Gateway & Route Tables
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DB_HOST` | RDS endpoint | `prodb.xxxxx.rds.amazonaws.com` |
+| `DB_USER` | Database username | `admin` |
+| `DB_PASSWORD` | Database password | `your-secure-password` |
+| `DB_NAME` | Database name | `insured` |
 
-1. Create **IGW** → Attach to `project-vpc`.
+## Quick Start
 
-2. **Public Route Table:**
-   - Add route `0.0.0.0/0 → IGW`  
-   - Associate: `Public-A`, `Public-B`
+### 1. Clone the Repository
 
-3. **Private Route Table:**
-   - Associate: `Private-A`, `Private-B`  
-   - ❌ No internet route needed  
+```bash
+git clone https://github.com/Khushal41/AWS-Flask---RDS-Deployment-on-AWS-Elastic-Beanstalk.git
+cd AWS-Flask---RDS-Deployment-on-AWS-Elastic-Beanstalk
+```
 
-➡️ EB instances will be in **public subnets**, RDS in **private subnets**.
+### 2. Local Development
 
----
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
 
-### Step 3️⃣: Security Groups
+# Install dependencies
+pip install -r requirements.txt
 
-- **SG-ALB (Load Balancer)**
-  - **Inbound:** HTTP `80`, HTTPS `443` → `0.0.0.0/0`
-  - **Outbound:** All
+# Set environment variables
+export DB_HOST=localhost
+export DB_USER=root
+export DB_PASSWORD=yourpassword
+export DB_NAME=insured
 
-- **SG-EC2 (Elastic Beanstalk EC2)**
-  - **Inbound:** HTTP `80` → SG-ALB  
-  - SSH `22` → Your IP  
-  - **Outbound:** All
+# Run the application
+python application.py
+```
 
-- **SG-RDS (MySQL)**
-  - **Inbound:** MySQL `3306` → SG-EC2 only  
-  - **Outbound:** All  
-  - *(Optional: allow MySQL `3306` from your IP for setup)*
+### 3. Deploy to AWS
 
----
+See the detailed deployment guide in [Docs/Notes.md](Docs/Notes.md).
 
-### Step 4️⃣: Create RDS (Private)
+**Quick deployment steps:**
 
-1. **DB Subnet Group** → Add `Private-A`, `Private-B`  
-   - **Name:** `project-db-subnet-group`
+1. Create VPC with public/private subnets
+2. Configure security groups
+3. Launch RDS MySQL in private subnets
+4. Create database schema using `insured.sql`
+5. Zip application files and deploy to Elastic Beanstalk
+6. Configure environment variables in EB console
 
-2. **RDS MySQL**
-   - **DB Identifier:** `prodb`  
-   - **Username:** `admin`  
-   - **Password:** `admin123`  
-   - **DB Class:** `db.t3.micro`  
-   - **Public access:** ❌ No  
-   - **Security group:** `SG-RDS`  
-   - **Initial DB name:** `insured`
+## API Endpoints
 
-📌 Copy **RDS endpoint** → used in Flask.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Home page with insurance products |
+| `GET` | `/claim` | Claim submission form |
+| `POST` | `/claim` | Submit a new claim |
 
----
+## Database Schema
 
-### Step 5️⃣: Load DB Schema
-
-### ✅ Option 1 (Temporary, less secure)
-1. Add your IP in `SG-RDS` inbound.  
-2. Run from your laptop:
-    ```bash
-    mysql -h <RDS-ENDPOINT> -u admin -p
-   ```
-
-3. Execute:
-     ```bash
-    CREATE DATABASE insured;
-    USE insured;
-    CREATE TABLE claims (
+```sql
+CREATE TABLE claims (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    policy_id VARCHAR(255),
-    name VARCHAR(255),
-    dob DATE,
-    mobile VARCHAR(20),
+    policy_id VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    dob DATE NOT NULL,
+    mobile VARCHAR(20) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ); 
-   ```
+);
+```
 
-### ✅ Option 2 (Preferred, secure via Bastion Host)
-1. Launch Bastion EC2 in public subnet.
-2. Allow SSH 22 from your IP.
-3. Allow inbound 3306 from SG-Bastion → SG-RDS.
-4. SSH into bastion:
-    ```bash
-    ssh -i ~/keys/mykey.pem ec2-user@<BASTION_PUBLIC_IP>
-     ```
-5. Install MySQL client:
-    ```bash
-    # Amazon Linux
-    sudo dnf install -y mariadb105
+## Security Best Practices
 
+- **RDS in Private Subnets**: Database is not accessible from the internet
+- **Security Groups**: Restrict traffic to only necessary ports and sources
+- **Environment Variables**: Sensitive data stored as environment variables, not in code
+- **Use AWS Secrets Manager** (recommended): Store database credentials securely
+- **Enable HTTPS**: Configure SSL certificate on the load balancer
 
-    # Ubuntu
-    sudo apt-get update && sudo apt-get install -y mysql-client
-     ```
+## Troubleshooting
 
-6. Connect:
-    ```bash
-    mysql -h <RDS-ENDPOINT> -u admin -p
-    ```
-7. Create schema (same SQL as above).
+| Issue | Solution |
+|-------|----------|
+| Database connection failed | Verify security group allows EB instances to connect to RDS on port 3306 |
+| Application not starting | Check EB logs: `eb logs` or AWS Console |
+| 502 Bad Gateway | Ensure `application.py` uses correct WSGI entry point |
+| Environment variables not set | Verify in EB Console → Configuration → Software |
 
----
+## Cost Optimization
 
-### Step 6️⃣: Prepare Flask App
+This architecture is optimized for cost:
 
-### Folder structure:
-    student-management-system/
-    │
-    ├── add_student.html        # Page to add new student
-    ├── fetch_all_students.html # Page to view all students
-    ├── index.html              # (Optional) Home page linking to add/view
-    ├── scripts.js              # JS file for API     integration
-    ├── README.md               # Project documentation
+- **No NAT Gateway**: EB instances in public subnets with public IPs
+- **db.t3.micro**: Suitable for development/small workloads
+- **Single-AZ RDS**: Use Multi-AZ for production if needed
+- **Load-balanced environment**: Auto-scales based on demand
 
----
+## Contributing
 
-### Step 7️⃣: Zip the App
-1. Zip contents only (not folder).
-   - Example:
-     ```bash
-     v1.zip → [application.py, requirements.txt, .ebextensions]
-     ```
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
----
+## License
 
-### Step 8️⃣: Deploy on Elastic Beanstalk
+This project is open source and available under the [MIT License](LICENSE).
 
-1. **EB → Create Application:**
-   - **Name:** flask-insured-app
-   - **Platform:** Python 3.x
-   - **Environment type:** Load balanced
-   - **Upload:** v1.zip
+## Author
 
-2. **Configure → Network:**
-   - **VPC:** project-vpc
-   - **LB Subnets:** Public-A, Public-B
-   - **EC2 Subnets:** Public-A, Public-B (auto-assign public IP)
-   - **ELB SG:** SG-ALB
-   - **EC2 SG:** SG-EC2
-   - **Key pair:** your SSH key
-   - **Roles:** default EB roles
+**Khushal Ravindra Bhavsar**
 
-3. **Launch environment** → wait 5–10 min.
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/khushal-bhavsar-/)
+[![GitHub](https://img.shields.io/badge/GitHub-Follow-black?logo=github)](https://github.com/Khushal41)
 
-
----
-
-### Step 9️⃣: Test App
-1. Go to:
-    ```bash
-    http://<env>.elasticbeanstalk.com/
-    ```
-   - / → ✅ Flask app running!
-   - /claims → returns [] initially
-
-2. Add sample data:
-    ```bash
-    curl -X POST http://<EB-URL>/add-claim \
-    -H "Content-Type: application/json" \
-    -d '{"policy_id":"P1001","name":"Alice","dob":"1992-02-02","mobile":"9876543210"}'
-    ```
-
----
-
-## ✅ Final Working Flow:
-1. **Elastic Beanstalk** EC2 instances in public subnets run Flask app.
-2. **Application Load Balancer (ALB)** routes traffic to EB EC2 instances.
-3. **Flask app** connects securely to **RDS MySQL** in private subnets.
-4. **Security groups** restrict access:
-   - ALB ↔ EC2
-   - EC2 ↔ RDS
-   - SSH only from your IP
-
----
-
-## 👨‍💻 Author
-Khushal Ravindra Bhavsar✨  
-🔗 [LinkedIn Profile](https://www.linkedin.com/in/khushal-bhavsar-/)  
-🐙 [GitHub](https://github.com/Khushal41)
-- Full Stack MERN Developer | Python & Cloud Enthusiast  
+Full Stack MERN Developer | Python & Cloud Enthusiast
