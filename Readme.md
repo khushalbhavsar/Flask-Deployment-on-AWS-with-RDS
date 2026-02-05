@@ -18,6 +18,58 @@ This project demonstrates a secure, scalable insurance claims management system 
 
 ## Architecture
 
+> 📄 **[View Complete Architecture Documentation](Docs/Architecture.md)** - Includes detailed diagrams for data flow, security layers, scaling strategy, and more.
+
+```mermaid
+flowchart TB
+    subgraph Internet["🌐 Internet"]
+        Users["👥 Users"]
+    end
+
+    subgraph AWS["☁️ AWS Cloud"]
+        IGW["🚪 Internet Gateway"]
+        
+        subgraph VPC["🔒 VPC (10.0.0.0/16)"]
+            subgraph PublicSubnets["📤 Public Subnets"]
+                subgraph PubA["Public Subnet A<br/>10.0.1.0/24 | AZ-1"]
+                    EC2_A["🖥️ EC2 Instance<br/>Flask App"]
+                end
+                subgraph PubB["Public Subnet B<br/>10.0.2.0/24 | AZ-2"]
+                    EC2_B["🖥️ EC2 Instance<br/>Flask App"]
+                end
+            end
+            
+            ALB["⚖️ Application Load Balancer"]
+            
+            subgraph PrivateSubnets["🔐 Private Subnets"]
+                subgraph PriA["Private Subnet A<br/>10.0.3.0/24 | AZ-1"]
+                    RDS_Primary["🗄️ RDS MySQL<br/>Primary"]
+                end
+                subgraph PriB["Private Subnet B<br/>10.0.4.0/24 | AZ-2"]
+                    RDS_Standby["🗄️ RDS MySQL<br/>Standby"]
+                end
+            end
+        end
+        
+        subgraph EB["🚀 Elastic Beanstalk"]
+            ASG["📈 Auto Scaling"]
+        end
+    end
+
+    Users -->|HTTPS| IGW
+    IGW --> ALB
+    ALB --> EC2_A
+    ALB --> EC2_B
+    EC2_A -->|Port 3306| RDS_Primary
+    EC2_B -->|Port 3306| RDS_Primary
+    RDS_Primary -.->|Sync| RDS_Standby
+    EB -.-> EC2_A
+    EB -.-> EC2_B
+```
+
+<details>
+<summary>📋 View ASCII Diagram (for terminals without Mermaid support)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              AWS VPC (10.0.0.0/16)                      │
@@ -55,6 +107,7 @@ This project demonstrates a secure, scalable insurance claims management system 
                                ▼
                          [ Internet ]
 ```
+</details>
 
 ## Tech Stack
 
@@ -76,7 +129,8 @@ This project demonstrates a secure, scalable insurance claims management system 
 ├── insured.sql             # Database schema
 ├── nginx.conf              # Nginx configuration (optional)
 ├── Docs/
-│   └── Notes.md            # Detailed deployment guide
+│   ├── Architecture.md     # Detailed architecture diagrams
+│   └── Notes.md            # Step-by-step deployment guide
 ├── static/
 │   ├── style.css           # Application styles
 │   └── images/             # Static images
