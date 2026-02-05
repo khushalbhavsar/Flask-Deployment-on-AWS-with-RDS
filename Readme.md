@@ -1,4 +1,4 @@
-# Flask + RDS Deployment on AWS Elastic Beanstalk
+# Flask Deployment on AWS with RDS
 
 A production-ready **Flask web application** deployed on **AWS Elastic Beanstalk** with **MySQL RDS** in a secure VPC architecture.
 
